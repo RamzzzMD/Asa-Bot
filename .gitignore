@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/*.sqlite*
+data/*.sqlite
+data/iqc/
+*.log
+.DS_Store
+.env
+.env.local
+deskripsi_youtube.txt
+*.zip
