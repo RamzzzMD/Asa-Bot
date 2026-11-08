@@ -32,6 +32,8 @@ export interface PluginPermissions {
 import type { AppDatabase } from '../src/lib/database.js';
 
 export interface PluginRegistryLike {
+    register(filePath: string, plugin: Plugin): void;
+    unregister(filePath: string): boolean;
     getAllPlugins(): Plugin[];
     getPluginsByCategory(): Map<string, Plugin[]>;
     getPluginCount(): number;

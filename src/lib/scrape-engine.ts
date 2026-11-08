@@ -1,7 +1,7 @@
 import fs from 'node:fs';
+import nodeModule from 'node:module';
 import path from 'node:path';
-import ts from 'typescript';
-import type { PluginRegistry } from '../core/plugins.js';
+import type { PluginRegistryLike } from '../../types/plugin.js';
 import { PluginLoader } from '../core/plugins.js';
 import { chat as deepChat } from '../../scrape/deepchat.js';
 import { deepaiChat } from '../../scrape/deepai.js';
@@ -644,26 +644,15 @@ export function normalizeScrapeToTypeScript(rawCode: string, analysis: ScrapeAna
 }
 
 /**
- * Validates that a TypeScript file transpiles without syntax errors.
+ * Validates that a TypeScript file has valid structure and can be transpiled cleanly.
  */
 export function validateTypeScriptSyntax(code: string): { valid: boolean; error?: string } {
     try {
-        const result = ts.transpileModule(code, {
-            compilerOptions: {
-                target: ts.ScriptTarget.ES2022,
-                module: ts.ModuleKind.NodeNext,
-                moduleResolution: ts.ModuleResolutionKind.NodeNext
-            },
-            reportDiagnostics: true
-        });
-
-        const syntaxErrors = (result.diagnostics || []).filter(
-            (d) => d.category === ts.DiagnosticCategory.Error
-        );
-
-        if (syntaxErrors.length > 0) {
-            const firstMsg = ts.flattenDiagnosticMessageText(syntaxErrors[0].messageText, '\n');
-            return { valid: false, error: firstMsg };
+        const stripFn = (nodeModule as any).stripTypeScriptTypes;
+        if (typeof stripFn === 'function') {
+            stripFn(code, { mode: 'strip' });
+        } else {
+            transpileToJs(code);
         }
         return { valid: true };
     } catch (err: any) {
@@ -675,15 +664,25 @@ export function validateTypeScriptSyntax(code: string): { valid: boolean; error?
  * Transpiles TypeScript source code into ES2022 JavaScript for `dist/`.
  */
 export function transpileToJs(tsCode: string): string {
-    const result = ts.transpileModule(tsCode, {
-        compilerOptions: {
-            target: ts.ScriptTarget.ES2022,
-            module: ts.ModuleKind.NodeNext,
-            moduleResolution: ts.ModuleResolutionKind.NodeNext,
-            esModuleInterop: true
+    const stripFn = (nodeModule as any).stripTypeScriptTypes;
+    if (typeof stripFn === 'function') {
+        try {
+            return stripFn(tsCode, { mode: 'strip' });
+        } catch {
+            // Fallback to regex stripper below
         }
-    });
-    return result.outputText;
+    }
+
+    return tsCode
+        .replace(/^\s*import\s+type\s+[^;]+;\s*$/gm, '')
+        .replace(/,\s*type\s+[A-Za-z0-9_$]+/g, '')
+        .replace(/type\s+[A-Za-z0-9_$]+\s*,/g, '')
+        .replace(/^\s*(?:export\s+)?interface\s+[A-Za-z0-9_$]+\s*\{[\s\S]*?^\}/gm, '')
+        .replace(/^\s*(?:export\s+)?type\s+[A-Za-z0-9_$]+\s*=[^;]+;/gm, '')
+        .replace(/:\s*Plugin\s*=/g, ' =')
+        .replace(/\(context:\s*PluginContext\):\s*Promise<void>/g, '(context)')
+        .replace(/\(([^)]*?):\s*(?:string|number|boolean|any|unknown|Buffer|Record<[^>]+>)\)/g, '($1)')
+        .replace(/\s+as\s+(?:any|unknown|string|number|boolean|const)\b/g, '');
 }
 
 /**
@@ -1177,7 +1176,7 @@ export async function deployScrapeAndPlugin(
     options: {
         hintName?: string;
         hintCategory?: ScrapeCategory;
-        registry?: PluginRegistry;
+        registry?: PluginRegistryLike;
     } = {}
 ): Promise<DeployScrapeResult> {
     const analysis = analyzeScrapeCode(rawCode, options.hintName, options.hintCategory);

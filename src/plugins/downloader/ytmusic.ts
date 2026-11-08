@@ -43,7 +43,7 @@ const handler: Plugin = {
             const ytUrl = `https://music.youtube.com/watch?v=${trackData.videoId}`;
             let lyricsSnippet = '';
             try {
-                const lyr = await getLyrics(trackData.videoId);
+                const lyr = await getLyrics(trackData.videoId || query);
                 if (lyr?.lyrics) {
                     const previewLines = lyr.lyrics.split('\n').slice(0, 6).join('\n').trim();
                     if (previewLines) {
